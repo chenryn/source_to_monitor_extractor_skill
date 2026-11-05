@@ -1,0 +1,364 @@
+{
+  "_doc": "Java/Go/JS(含 Kotlin/TS) 三平面信号模式表。由 scripts/lang_extract.py 加载。新增语言或 SDK 写法时优先改这里，而不是改脚本。规则字段说明见 lang_extract.py 顶部注释。所有 pattern 以 re.I|re.M 编译；字符串字面量内容在匹配用的掩码文本里被替换为等长占位符，因此不要写依赖字符串内容的正则，需要时用 literal_pattern。",
+
+  "java": {
+    "label": "Java / Kotlin",
+    "extensions": [".java", ".kt"],
+    "test_path_re": "(/src/test/|/test/|/tests/|Test\\.java$|Tests\\.java$|Test\\.kt$)",
+    "module_strip": ["src/main/java/", "src/main/kotlin/", "src/test/java/", "src/"],
+
+    "loggers": [
+      {
+        "name": "slf4j_log4j",
+        "pattern": "(?P<recv>\\b[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\.(?P<level>trace|debug|info|warn|warning|error|fatal|critical)\\s*\\(",
+        "level": "group:level",
+        "name_from": "arg0",
+        "receiver_hint": "log",
+        "note": "slf4j / log4j2 / logback / commons-logging：logger.info(\"a {}\", x)、LOGGER.error(...)"
+      },
+      {
+        "name": "jul_log",
+        "pattern": "\\b[A-Za-z_$][\\w$.]*\\.log\\s*\\(\\s*Level\\.(?P<level>SEVERE|WARNING|INFO|CONFIG|FINE|FINER|FINEST|WARN|ERROR|FATAL)\\s*,",
+        "level": "group:level",
+        "name_from": "arg1",
+        "note": "java.util.logging：logger.log(Level.WARNING, \"msg\")"
+      },
+      {
+        "name": "log4j_fluent",
+        "pattern": "\\.at(?P<level>Trace|Debug|Info|Warn|Error|Fatal)\\s*\\(\\s*\\)\\s*\\.log\\s*\\(",
+        "level": "group:level",
+        "name_from": "arg0",
+        "note": "log4j2 fluent API：logger.atInfo().log(\"msg\")"
+      },
+      {
+        "name": "system_out",
+        "pattern": "System\\.out\\.print(?:ln|f)?\\s*\\(",
+        "level": "fixed:INFO",
+        "name_from": "arg0",
+        "print": true
+      },
+      {
+        "name": "system_err",
+        "pattern": "System\\.err\\.print(?:ln|f)?\\s*\\(",
+        "level": "fixed:ERROR",
+        "name_from": "arg0",
+        "print": true
+      },
+      {
+        "name": "java_assert",
+        "pattern": "\\bassert\\s+[^;{]+",
+        "level": "fixed:FATAL",
+        "name_from": "none",
+        "assertion": true,
+        "note": "assert 失败抛 AssertionError，未必落日志；单列统计"
+      }
+    ],
+
+    "metrics": [
+      {
+        "name": "micrometer_builder",
+        "pattern": "\\b(?P<ctor>Counter|Gauge|Timer|DistributionSummary|LongTaskTimer|FunctionCounter|FunctionTimer)\\.builder\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0",
+        "chain_name": "name",
+        "doc_from": "chain:description|key:description",
+        "note": "Micrometer / Prometheus Java client 0.16+ 的 Counter.builder(\"x\") 与 Counter.builder().name(\"x\") 两种写法"
+      },
+      {
+        "name": "otel_java_meter",
+        "pattern": "\\.(?P<ctor>counterBuilder|histogramBuilder|upDownCounterBuilder|gaugeBuilder)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0",
+        "doc_from": "chain:setDescription|key:description",
+        "note": "OTel Java：meter.counterBuilder(\"demo.ad.requests\").setDescription(...).build()"
+      },
+      {
+        "name": "micrometer_metrics",
+        "pattern": "\\bMetrics\\.(?P<ctor>counter|gauge|timer|summary)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0"
+      },
+      {
+        "name": "registry_direct",
+        "pattern": "\\b[A-Za-z_]\\w*[Rr]egistry\\.(?P<ctor>counter|gauge|timer|summary)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0",
+        "note": "registry.counter(\"x\", tags...)"
+      },
+      {
+        "name": "timed_annotation",
+        "pattern": "@Timed\\s*\\(",
+        "kind": "definition",
+        "metric_type": "timer",
+        "name_from": "arg0",
+        "annotation": true,
+        "note": "@Timed(\"x\") / @Timed(value=\"x\")：注解驱动的计时指标，没有显式写入点"
+      }
+    ],
+
+    "updates": [
+      {
+        "name": "java_metric_write",
+        "pattern": "\\.(?P<method>increment|inc|dec|add|record|observe|set|count)\\s*\\(",
+        "note": "Micrometer Counter.increment() / OTel LongCounter.add() / Timer.record()；接收者必须能对上已定义指标变量或名字含 metric 词"
+      }
+    ],
+
+    "spans": [
+      {
+        "name": "otel_span_builder",
+        "pattern": "\\b\\w*[Tt]racer\\.spanBuilder\\s*\\(",
+        "kind": "span",
+        "name_from": "arg0",
+        "style": "call:spanBuilder"
+      },
+      {
+        "name": "with_span",
+        "pattern": "@(?:WithSpan|NewSpan)\\s*\\(",
+        "kind": "span",
+        "name_from": "arg0",
+        "style": "annotation"
+      },
+      {
+        "name": "span_attribute",
+        "pattern": "\\b\\w*[Ss]pan\\.set(?:Attribute|Tag)\\s*\\(",
+        "kind": "attribute",
+        "name_from": "arg0",
+        "all_args": false
+      },
+      {
+        "name": "span_event",
+        "pattern": "\\b\\w*[Ss]pan\\.addEvent\\s*\\(",
+        "kind": "span_event",
+        "name_from": "arg0"
+      }
+    ],
+
+    "exposures": [
+      {"name": "prometheus_meter_registry", "pattern": "\\b(?:PrometheusMeterRegistry|OtlpMeterRegistry)\\b", "exposure_type": "registry"},
+      {"name": "prometheus_http_server", "pattern": "\\bHTTPServer\\s*\\(", "exposure_type": "http_server"},
+      {"name": "metrics_path", "literal_pattern": "^/(?:actuator/)?(?:prometheus|metrics)(?:/.*)?$", "exposure_type": "path"}
+    ]
+  },
+
+  "go": {
+    "label": "Go",
+    "extensions": [".go"],
+    "test_path_re": "(_test\\.go$|/testdata/|/vendor/)",
+    "module_strip": ["cmd/", "internal/", "pkg/", "src/"],
+
+    "loggers": [
+      {
+        "name": "go_logger",
+        "pattern": "(?P<recv>\\b[A-Za-z_][\\w]*(?:\\.[A-Za-z_]\\w*)*)\\.(?P<level>trace|debug|info|warn|warning|error|fatal|panic|dpanic)\\s*\\(",
+        "level": "group:level",
+        "name_from": "arg0",
+        "receiver_hint": "log|logger|slog",
+        "note": "slog / zap / logrus / zerolog：logger.Error(\"msg\", slog.Any(\"error\", err))"
+      },
+      {
+        "name": "gokit_level",
+        "pattern": "\\blevel\\.(?P<level>Info|Warn|Error|Debug)\\s*\\([^)]*\\)\\s*\\.Log\\s*\\(",
+        "level": "group:level",
+        "name_from": "arg1",
+        "note": "go-kit：level.Info(logger).Log(\"msg\", \"started\")，消息是 msg 键后面的值"
+      },
+      {
+        "name": "stdlib_log",
+        "pattern": "\\blog\\.(?P<level>Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln)\\s*\\(",
+        "level": "group:level",
+        "name_from": "arg0"
+      },
+      {
+        "name": "slog_package",
+        "pattern": "\\bslog\\.(?P<level>Info|Warn|Error|Debug)\\s*\\(",
+        "level": "group:level",
+        "name_from": "arg0"
+      },
+      {
+        "name": "go_panic",
+        "pattern": "\\bpanic\\s*\\(",
+        "level": "fixed:FATAL",
+        "name_from": "arg0",
+        "assertion": true,
+        "note": "panic 直接终止 goroutine/进程，不以日志落盘"
+      },
+      {
+        "name": "fmt_print",
+        "pattern": "\\bfmt\\.Print(?:f|ln)?\\s*\\(",
+        "level": "fixed:INFO",
+        "name_from": "arg0",
+        "print": true
+      }
+    ],
+
+    "metrics": [
+      {
+        "name": "client_golang",
+        "pattern": "\\b(?:prometheus|promauto)(?:\\.With\\s*\\([^)]*\\))?\\.(?P<ctor>NewCounter|NewCounterVec|NewCounterFunc|NewGauge|NewGaugeVec|NewGaugeFunc|NewHistogram|NewHistogramVec|NewSummary|NewSummaryVec|NewUntypedFunc)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "key:Name",
+        "doc_from": "key:Help",
+        "labels_from": "arg1",
+        "prefix_from": "key:Namespace",
+        "note": "prometheus.NewCounterVec(prometheus.CounterOpts{Name: \"x\", Help: \"...\"}, []string{\"role\"})"
+      },
+      {
+        "name": "otel_go_meter",
+        "pattern": "\\.(?P<ctor>Int64Counter|Float64Counter|Int64Histogram|Float64Histogram|Int64UpDownCounter|Float64UpDownCounter|Int64Gauge|Float64Gauge|Int64ObservableGauge|Float64ObservableGauge|Int64ObservableCounter|Float64ObservableCounter)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0",
+        "doc_from": "chain:WithDescription|key:description",
+        "note": "OTel Go：meter.Int64Counter(\"x\", metric.WithDescription(\"y\"))"
+      },
+      {
+        "name": "opencensus_stats",
+        "pattern": "\\bstats\\.(?P<ctor>Int64|Float64)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0"
+      }
+    ],
+
+    "updates": [
+      {
+        "name": "go_metric_write",
+        "pattern": "\\.(?P<method>Inc|Dec|Add|Observe|Set)\\s*\\("
+      }
+    ],
+
+    "spans": [
+      {
+        "name": "otel_go_start",
+        "pattern": "(?P<recv>\\b\\w*[Tt]racer\\b|otel\\.Tracer\\s*\\([^)]*\\))\\.Start\\s*\\(",
+        "kind": "span",
+        "name_from": "arg1",
+        "style": "call:tracer.Start",
+        "note": "tracer.Start(ctx, \"name\")；第一个参数是 context，不是 span 名"
+      },
+      {
+        "name": "span_attribute",
+        "pattern": "\\b\\w*[Ss]pan\\.SetAttributes?\\s*\\(",
+        "kind": "attribute",
+        "name_from": "all_args",
+        "all_args": true,
+        "note": "span.SetAttributes(attribute.String(\"k\", v), ...)：每个参数取第一个字符串作为属性名"
+      },
+      {
+        "name": "span_event",
+        "pattern": "\\b\\w*[Ss]pan\\.AddEvent\\s*\\(",
+        "kind": "span_event",
+        "name_from": "arg0"
+      }
+    ],
+
+    "exposures": [
+      {"name": "promhttp", "pattern": "\\bpromhttp\\.Handler(?:For|Opts)?\\s*\\(", "exposure_type": "handler"},
+      {"name": "http_handle_metrics", "pattern": "\\b(?:http\\.(?:Handle|HandleFunc)|mux\\.(?:Handle|HandleFunc))\\s*\\(", "exposure_type": "route", "require_literal": "^/(?:actuator/)?(?:prometheus|metrics)(?:/.*)?$"},
+      {"name": "metrics_path", "literal_pattern": "^/(?:actuator/)?(?:prometheus|metrics)(?:/.*)?$", "exposure_type": "path"}
+    ]
+  },
+
+  "js": {
+    "label": "JavaScript / TypeScript",
+    "extensions": [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"],
+    "test_path_re": "(\\.(test|spec)\\.[cm]?[jt]sx?$|/__tests__/|/test/|/tests/|/e2e/|\\.d\\.ts$)",
+    "module_strip": ["src/", "lib/", "app/", "packages/"],
+
+    "loggers": [
+      {
+        "name": "pino_winston_bunyan",
+        "pattern": "(?P<recv>\\b[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\.(?P<level>trace|debug|info|warn|warning|error|fatal|critical|log|verbose)\\s*\\(",
+        "level": "group:level",
+        "name_from": "message",
+        "receiver_hint": "log|logger|console",
+        "note": "pino 结构化写法 logger.info({err}, 'msg') 与 winston logger.info('msg', meta) 并存；引擎按首参是否为对象字面量选模板"
+      },
+      {
+        "name": "console",
+        "pattern": "\\bconsole\\.(?P<level>log|info|warn|error|debug|trace)\\s*\\(",
+        "level": "group:level",
+        "name_from": "message",
+        "print": true
+      },
+      {
+        "name": "process_stdout",
+        "pattern": "\\bprocess\\.(?:stdout|stderr)\\.write\\s*\\(",
+        "level": "fixed:INFO",
+        "name_from": "arg0",
+        "print": true
+      }
+    ],
+
+    "metrics": [
+      {
+        "name": "prom_client",
+        "pattern": "new\\s+(?:[A-Za-z_$][\\w$]*\\.)?(?P<ctor>Counter|Gauge|Histogram|Summary)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "key:name",
+        "doc_from": "key:help",
+        "labels_from": "key:labelNames",
+        "require_key": "name",
+        "note": "prom-client：new Counter({ name: 'x', help: '...', labelNames: ['a'] })；必须有 name 字段，否则不算指标定义"
+      },
+      {
+        "name": "otel_js_meter",
+        "pattern": "\\.(?P<ctor>createCounter|createHistogram|createUpDownCounter|createObservableGauge|createObservableCounter|createGauge)\\s*\\(",
+        "kind": "definition",
+        "metric_type": "auto",
+        "name_from": "arg0",
+        "doc_from": "key:description",
+        "note": "OTel JS：meter.createCounter('demo.payment.transactions', { description: '...' })"
+      },
+      {
+        "name": "prom_client_register",
+        "pattern": "\\b(?:register|registry)\\.registerMetric\\s*\\(",
+        "kind": "registration",
+        "name_from": "none"
+      }
+    ],
+
+    "updates": [
+      {
+        "name": "js_metric_write",
+        "pattern": "\\.(?P<method>inc|dec|add|observe|set|record)\\s*\\("
+      }
+    ],
+
+    "spans": [
+      {
+        "name": "otel_js_start",
+        "pattern": "\\b[A-Za-z_$][\\w$.]*\\.start(?:Active)?Span\\s*\\(",
+        "kind": "span",
+        "name_from": "arg0",
+        "style": "call:startSpan"
+      },
+      {
+        "name": "span_attribute",
+        "pattern": "\\b\\w*[Ss]pan\\.setAttributes?\\s*\\(",
+        "kind": "attribute",
+        "name_from": "arg0",
+        "all_args": true
+      },
+      {
+        "name": "span_event",
+        "pattern": "\\b\\w*[Ss]pan\\.addEvent\\s*\\(",
+        "kind": "span_event",
+        "name_from": "arg0"
+      }
+    ],
+
+    "exposures": [
+      {"name": "prom_client_metrics", "pattern": "\\b(?:register|registry)\\.metrics\\s*\\(", "exposure_type": "handler"},
+      {"name": "content_type", "pattern": "\\b(?:register|registry)\\.contentType\\b", "exposure_type": "handler"},
+      {"name": "metrics_path", "literal_pattern": "^/(?:actuator/)?(?:prometheus|metrics)(?:/.*)?$", "exposure_type": "path"}
+    ]
+  }
+}

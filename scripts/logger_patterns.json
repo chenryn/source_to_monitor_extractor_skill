@@ -1,0 +1,151 @@
+{
+  "python": {
+    "description": "Python 日志库模式（AST 解析失败时的正则回退）",
+    "loggers": [
+      {
+        "name": "logging_std",
+        "pattern": "logging\\.(debug|info|warning|warn|error|critical|fatal)\\s*\\(",
+        "level_group": 1,
+        "note": "标准库 logging 模块"
+      },
+      {
+        "name": "logger_instance",
+        "pattern": "\\b[A-Za-z_][\\w\\.]*logger\\.(debug|info|warning|warn|error|critical|fatal|exception)\\s*\\(",
+        "level_group": 1,
+        "note": "logger 实例方法（含 self.logger / 模块级 logger）"
+      },
+      {
+        "name": "logger_once",
+        "pattern": "\\blogger\\.(debug|info|warning|warn|error|critical)_once\\s*\\(",
+        "level_group": 1,
+        "note": "vLLM 等项目的 *_once 变体，只打印一次"
+      },
+      {
+        "name": "loguru",
+        "pattern": "\\blog\\.(debug|info|warning|warn|error|critical|exception|trace)\\s*\\(",
+        "level_group": 1,
+        "note": "loguru 库"
+      },
+      {
+        "name": "structlog",
+        "pattern": "\\blogger\\.(debug|info|warning|warn|error|critical|msg)\\s*\\(",
+        "level_group": 1,
+        "note": "structlog 库"
+      },
+      {
+        "name": "print",
+        "pattern": "\\bprint\\s*\\(",
+        "level_group": null,
+        "note": "原生 print 函数（默认不计入，用 --include-print 开启）"
+      }
+    ],
+    "fstring_regex": "\\{([^}]+)\\}",
+    "percent_format_regex": "%(?:\\(([^)]+)\\))?[-+#0 ]*\\d*(?:\\.\\d+)?[hlL]?[sdifgxXeEor]"
+  },
+  "cpp": {
+    "description": "C++ 日志库模式。level 用命名组捕获，未捕获时用 fixed_level。",
+    "loggers": [
+      {
+        "name": "glog",
+        "pattern": "\\bLOG\\((?P<level>INFO|WARNING|ERROR|FATAL)\\)\\s*<<",
+        "note": "google glog"
+      },
+      {
+        "name": "glog_if",
+        "pattern": "\\bLOG_IF\\((?P<level>INFO|WARNING|ERROR|FATAL)\\s*,",
+        "note": "glog 条件日志"
+      },
+      {
+        "name": "glog_vlog",
+        "pattern": "\\bVLOG\\(\\d+\\)\\s*<<",
+        "fixed_level": "DEBUG",
+        "note": "glog 分级详细日志"
+      },
+      {
+        "name": "glog_check",
+        "pattern": "\\b(?:D?CHECK)(?:_EQ|_NE|_LT|_LE|_GT|_GE|_NOTNULL)?\\s*\\(",
+        "fixed_level": "FATAL",
+        "note": "glog 断言：失败即 abort，属于 P0 崩溃信号"
+      },
+      {
+        "name": "spdlog",
+        "pattern": "\\b(?:spdlog::)?(?P<level>debug|info|warn|error|critical|trace)\\s*\\(",
+        "note": "spdlog 库"
+      },
+      {
+        "name": "custom_macro",
+        "pattern": "\\bLOG_(?P<level>INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE)\\s*\\(",
+        "note": "自定义日志宏（LOG_INFO / LOG_ERROR 等）"
+      },
+      {
+        "name": "prefixed_macro",
+        "pattern": "\\b[A-Z][A-Z0-9_]*_LOG_(?P<level>INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE)\\s*\\(",
+        "note": "带项目前缀的日志宏（TLLM_LOG_INFO / SG_LOG_WARN 等），\\b 会挡住 LOG_ 那种写法"
+      },
+      {
+        "name": "prefixed_check",
+        "pattern": "\\b[A-Z][A-Z0-9_]*_CHECK(?:_EQ|_NE|_LT|_LE|_GT|_GE|_NOTNULL)?\\s*\\(",
+        "fixed_level": "FATAL",
+        "note": "带前缀的断言宏（TLLM_CHECK / TLLM_CHECK_WITH_INFO），失败即 abort"
+      },
+      {
+        "name": "cout",
+        "pattern": "\\bstd::cout\\s*<<",
+        "fixed_level": "INFO",
+        "note": "std::cout 输出"
+      },
+      {
+        "name": "cerr",
+        "pattern": "\\bstd::cerr\\s*<<",
+        "fixed_level": "ERROR",
+        "note": "std::cerr 输出"
+      }
+    ],
+    "placeholder_regex": "\\{\\d*\\}|%[sdifx]"
+  },
+  "rust": {
+    "description": "Rust 日志宏。tracing / log 两个 crate 的宏都带 `!`，level 用命名组捕获。",
+    "loggers": [
+      {
+        "name": "tracing_std",
+        "pattern": "\\btracing::(?P<level>info|warn|error|debug|trace)!\\s*\\(",
+        "note": "tracing crate 全限定宏"
+      },
+      {
+        "name": "tracing_macro",
+        "pattern": "(?<![\\w:.])(?P<level>info|warn|error|debug|trace)!\\s*\\(",
+        "note": "tracing / log 的裸宏（use tracing::info 之后）"
+      },
+      {
+        "name": "log_std",
+        "pattern": "\\blog::(?P<level>info|warn|error|debug|trace)!\\s*\\(",
+        "note": "log crate 全限定宏"
+      },
+      {
+        "name": "panic",
+        "pattern": "\\b(?:panic|unreachable|todo|unimplemented)!\\s*\\(",
+        "fixed_level": "FATAL",
+        "note": "panic 系列：进程级终止，属于 P0 崩溃信号"
+      },
+      {
+        "name": "rust_assert",
+        "pattern": "\\b(?:debug_)?assert(?:_eq|_ne)?!\\s*\\(",
+        "fixed_level": "FATAL",
+        "note": "assert 宏：失败即 panic"
+      },
+      {
+        "name": "println",
+        "pattern": "\\bprintln!\\s*\\(",
+        "fixed_level": "INFO",
+        "note": "stdout 输出（默认不计入，用 --include-print 开启）"
+      },
+      {
+        "name": "eprintln",
+        "pattern": "\\beprintln!\\s*\\(",
+        "fixed_level": "ERROR",
+        "note": "stderr 输出（默认不计入，用 --include-print 开启）"
+      }
+    ],
+    "placeholder_regex": "\\{[^{}]*\\}"
+  }
+}
