@@ -1,0 +1,11 @@
+# WorkBuddy 项目记忆目录（含个人数据，不发布）
+.workbuddy-ai/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 开发调试产物
+*.bak
+*.bak-*
+.DS_Store
